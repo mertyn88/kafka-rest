@@ -35,6 +35,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Collections.emptyList;
@@ -43,7 +44,7 @@ import static java.util.Objects.requireNonNull;
 final class SchemaManagerImpl implements SchemaManager {
   private final SchemaRegistryClient schemaRegistryClient;
   private final SubjectNameStrategy defaultSubjectNameStrategy;
-  static Map<String, Pair<Integer, org.apache.avro.Schema>> subjectCache;
+  static Map<String, Pair<Integer, org.apache.avro.Schema>> subjectCache = new HashMap<>();
 
   private static final Logger log = LoggerFactory.getLogger(SchemaManager.class);
 
@@ -277,18 +278,17 @@ final class SchemaManagerImpl implements SchemaManager {
   //Custom Liam
   @Override
   public Map<String, Pair<Integer, org.apache.avro.Schema>> setSchemaSubject() {
-    Map<String, Pair<Integer, org.apache.avro.Schema>> result = new HashMap<>();
     try {
       for(String subject : schemaRegistryClient.getAllSubjects()) {
         SchemaMetadata schema = schemaRegistryClient.getLatestSchemaMetadata(subject);
-        result.put(subject, Pair.of(schema.getVersion(), new org.apache.avro.Schema.Parser().parse(schema.getSchema())));
+        subjectCache.put(subject, Pair.of(schema.getVersion(), new org.apache.avro.Schema.Parser().parse(schema.getSchema())));
         log.info(schema.getSchema());
       }
     } catch (RestClientException | IOException e) {
       e.printStackTrace();
     }
 
-    return result;
+    return subjectCache;
   }
 
   @Override
@@ -301,7 +301,11 @@ final class SchemaManagerImpl implements SchemaManager {
   @Override
   public Pair<Integer, org.apache.avro.Schema> getRegistrySchema(String topic) {
     if(subjectCache == null || subjectCache.size() == 0) {
-      refreshSchemaSubject();
+      try {
+        subjectCache = refreshSchemaSubject().get();
+      }catch (ExecutionException | InterruptedException e) {
+        e.printStackTrace();
+      }
     }
     return subjectCache.getOrDefault(topic + "-value", null);
   }

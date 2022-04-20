@@ -16,11 +16,9 @@
 package io.confluent.kafkarest.resources.v2;
 
 import io.confluent.kafkarest.Versions;
-import io.confluent.kafkarest.controllers.SchemaManager;
 import io.confluent.kafkarest.extension.ResourceAccesslistFeature.ResourceName;
 import io.confluent.rest.annotations.PerformanceMetric;
 
-import javax.inject.Provider;
 import javax.validation.Valid;
 import javax.ws.rs.*;
 import java.util.HashMap;
@@ -31,12 +29,6 @@ import java.util.Map;
 @Consumes({Versions.KAFKA_V2_JSON})
 @ResourceName("api.v2.root.*")
 public final class RootResource {
-
-  private final Provider<SchemaManager> schemaManager;
-
-  public RootResource(Provider<SchemaManager> schemaManager) {
-    this.schemaManager = schemaManager;
-  }
 
   @GET
   @PerformanceMetric("root.get+v2")
@@ -55,13 +47,5 @@ public final class RootResource {
   public Map<String, String> post(@Valid Map<String, String> request) {
     // This version allows testing with posted entities
     return new HashMap<>();
-  }
-
-
-  @GET
-  @Path("schema/refresh")
-  public void refreshSchemaRegistryCache() {
-    System.out.println("Refresh!");
-    //((SchemaManagerImpl)this.schemaManager.get()).refreshSchemaSubject();
   }
 }

@@ -108,9 +108,6 @@ public final class ProduceToTopicAction extends AbstractProduceAction {
           @Suspended AsyncResponse asyncResponse,
           @PathParam("topic") String topic,
           @Valid @NotNull ProduceRequest request) {
-
-    System.out.println("Custom Area");
-
     CompletableFuture<ProduceResponse> response = produceGenericSchema(topic, request);
     AsyncResponseBuilder.<ProduceResponse>from(Response.ok())
             .entity(response)
