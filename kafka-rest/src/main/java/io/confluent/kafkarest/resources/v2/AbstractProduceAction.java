@@ -15,18 +15,14 @@
 
 package io.confluent.kafkarest.resources.v2;
 
-import static io.confluent.kafkarest.Errors.KAFKA_ERROR_ERROR_CODE;
-import static java.util.Objects.requireNonNull;
-
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.protobuf.ByteString;
 import io.confluent.kafkarest.Errors;
 import io.confluent.kafkarest.common.CompletableFutures;
-import io.confluent.kafkarest.controllers.ProduceController;
-import io.confluent.kafkarest.controllers.RecordSerializer;
-import io.confluent.kafkarest.controllers.SchemaManager;
+import io.confluent.kafkarest.controllers.*;
 import io.confluent.kafkarest.entities.EmbeddedFormat;
 import io.confluent.kafkarest.entities.ProduceResult;
 import io.confluent.kafkarest.entities.RegisteredSchema;
@@ -35,16 +31,26 @@ import io.confluent.kafkarest.entities.v2.ProduceRequest;
 import io.confluent.kafkarest.entities.v2.ProduceRequest.ProduceRecord;
 import io.confluent.kafkarest.entities.v2.ProduceResponse;
 import io.confluent.rest.exceptions.RestServerErrorException;
-import java.time.Instant;
-import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
-import javax.inject.Provider;
+import org.apache.avro.Schema;
+import org.apache.avro.generic.GenericData;
+import org.apache.avro.generic.GenericRecord;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.errors.AuthenticationException;
 import org.apache.kafka.common.errors.AuthorizationException;
 import org.apache.kafka.common.errors.RetriableException;
+
+import javax.inject.Provider;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+
+import static io.confluent.kafkarest.Errors.KAFKA_ERROR_ERROR_CODE;
+import static java.util.Objects.requireNonNull;
 
 abstract class AbstractProduceAction {
 
@@ -54,16 +60,89 @@ abstract class AbstractProduceAction {
   private final Provider<SchemaManager> schemaManager;
   private final Provider<RecordSerializer> recordSerializer;
   private final Provider<ProduceController> produceController;
+  private final Provider<ProduceGenericController> produceGenericController;
 
   AbstractProduceAction(
       Provider<SchemaManager> schemaManager,
       Provider<RecordSerializer> recordSerializer,
-      Provider<ProduceController> produceController) {
+      Provider<ProduceController> produceController,
+      Provider<ProduceGenericController> produceGenericController
+  ) {
     this.schemaManager = requireNonNull(schemaManager);
     this.recordSerializer = requireNonNull(recordSerializer);
     this.produceController = requireNonNull(produceController);
+    this.produceGenericController = requireNonNull(produceGenericController);
   }
 
+  /* Start Custom Code */
+
+  final CompletableFuture<ProduceResponse> produceGenericSchema(String topic, ProduceRequest request) {
+    // Work 1. Get Schema
+    //Pair<Integer, Schema> schema = ((SchemaManagerImpl)this.schemaManager.get()).getRegistrySchema(topic);
+    Pair<Integer, Schema> schema = this.schemaManager.get().getRegistrySchema(topic);
+    // Work 2. Convert schema -> GenericRecord
+    List<GenericRecord> genericRecords = getGenericRecords(schema.getRight(), request.getRecords());
+    // Work 3.
+    List<CompletableFuture<ProduceResult>> resultFutures = doProduceGeneric(topic, genericRecords);
+
+    return produceResultsToResponse(Optional.empty(), Optional.empty(), resultFutures);
+  }
+
+  private List<GenericRecord> getGenericRecords(Schema schema, List<ProduceRecord> produceRecords) {
+    List<GenericRecord> result = new ArrayList<>();
+    for(ProduceRecord produceRecord : produceRecords) {
+      produceRecord.getValue().ifPresent(pr -> {
+        GenericRecord record = new GenericData.Record(schema);
+        for (Schema.Field schemaField : schema.getFields()) {
+          typeValuePut(record, schemaField, pr.get(schemaField.name()));
+        }
+        result.add(record);
+      });
+    }
+    return result;
+  }
+
+  private void typeValuePut(GenericRecord record, Schema.Field schemaField, JsonNode node) {
+    if(node != null && !node.asText().equals("null")) {
+      Schema.Type type;
+      if(Schema.Type.UNION == schemaField.schema().getType()) {
+        int typeNum = node.asText() == null ? 0 : 1;
+        type = schemaField.schema().getTypes().get(typeNum).getType();
+      }else {
+        type = schemaField.schema().getType();
+      }
+      switch (type) {
+        case NULL:
+          record.put(schemaField.name(), null); break;
+        case LONG:
+          record.put(schemaField.name(), node.asLong()); break;
+        case INT:
+          record.put(schemaField.name(), node.asInt()); break;
+        case DOUBLE:
+          record.put(schemaField.name(), node.asDouble()); break;
+        case BOOLEAN:
+          record.put(schemaField.name(), node.asBoolean()); break;
+        default:
+          record.put(schemaField.name(), node.asText());
+      }
+    }else {
+      if(schemaField.name().equals("datetime")) {
+        record.put(schemaField.name(), LocalDateTime.now().toString());
+      } else if(schemaField.defaultVal() != null) {
+        record.put(schemaField.name(), schemaField.defaultVal());
+      }
+    }
+  }
+
+  private List<CompletableFuture<ProduceResult>> doProduceGeneric(
+          String topic, List<GenericRecord> records) {
+    return records.stream().map(
+              record -> produceGenericController.get().produce(topic, record)
+           ).collect(Collectors.toList());
+  }
+  /* End Custom Code */
+
+  /* Origin code */
   final CompletableFuture<ProduceResponse> produceWithoutSchema(
       EmbeddedFormat format,
       String topicName,
@@ -77,6 +156,7 @@ abstract class AbstractProduceAction {
             /* keySchema= */ Optional.empty(),
             /* valueSchema= */ Optional.empty(),
             request.getRecords());
+
 
     List<CompletableFuture<ProduceResult>> resultFutures = doProduce(topicName, serialized);
 

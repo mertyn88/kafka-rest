@@ -35,6 +35,7 @@ import io.confluent.kafkarest.Versions;
 import io.confluent.kafkarest.controllers.ProduceController;
 import io.confluent.kafkarest.controllers.RecordSerializer;
 import io.confluent.kafkarest.controllers.SchemaManager;
+import io.confluent.kafkarest.controllers.ProduceGenericController;
 import io.confluent.kafkarest.entities.EmbeddedFormat;
 import io.confluent.kafkarest.entities.ProduceResult;
 import io.confluent.kafkarest.entities.RegisteredSchema;
@@ -109,10 +110,12 @@ public class TopicsResourceAvroProduceTest
 
   @Mock private ProduceController produceController;
 
+  @Mock private ProduceGenericController produceGenericController;
+
   public TopicsResourceAvroProduceTest() throws RestConfigException {
     addResource(
         new ProduceToTopicAction(
-            () -> schemaManager, () -> recordSerializer, () -> produceController));
+            () -> schemaManager, () -> recordSerializer, () -> produceController, () -> produceGenericController));
   }
 
   private Response produceToTopic(ProduceRequest request, List<RecordMetadata> results) {

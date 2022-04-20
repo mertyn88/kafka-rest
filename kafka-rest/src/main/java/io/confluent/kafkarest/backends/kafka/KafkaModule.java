@@ -24,6 +24,8 @@ import io.confluent.kafkarest.ProducerMetrics;
 import javax.inject.Inject;
 import javax.inject.Provider;
 import javax.inject.Singleton;
+
+import org.apache.avro.generic.GenericRecord;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.common.utils.Time;
@@ -49,6 +51,10 @@ public final class KafkaModule extends AbstractBinder {
     bindFactory(ProducerFactory.class)
         .to(new TypeLiteral<Producer<byte[], byte[]>>() {})
         .in(Singleton.class);
+
+    bindFactory(ProducerGenericFactory.class)
+            .to(new TypeLiteral<Producer<String, GenericRecord>>() {})
+            .in(Singleton.class);
 
     bindFactory(ProducerMetricsFactory.class, Singleton.class)
         .to(ProducerMetrics.class)
@@ -109,6 +115,25 @@ public final class KafkaModule extends AbstractBinder {
     @Override
     public void dispose(Producer<byte[], byte[]> producer) {
       producer.close();
+    }
+  }
+
+  private static final class ProducerGenericFactory implements Factory<Producer<String, GenericRecord>> {
+    private final KafkaRestContext context;
+
+    @Inject
+    private ProducerGenericFactory(KafkaRestContext context) {
+      this.context = requireNonNull(context);
+    }
+
+    @Override
+    public Producer<String, GenericRecord> provide() {
+      return context.getProducerGeneric();
+    }
+
+    @Override
+    public void dispose(Producer<String, GenericRecord> genericProducer) {
+      genericProducer.close();
     }
   }
 

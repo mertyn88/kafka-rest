@@ -17,6 +17,7 @@ package io.confluent.kafkarest;
 
 import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
 import io.confluent.kafkarest.v2.KafkaConsumerManager;
+import org.apache.avro.generic.GenericRecord;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.producer.Producer;
 
@@ -27,6 +28,8 @@ public interface KafkaRestContext {
   /** @deprecated Use {@link #getProducer()} instead. */
   @Deprecated
   ProducerPool getProducerPool();
+  // Add Liam
+  ProducerGenericPool getProducerGenericPool();
 
   KafkaConsumerManager getKafkaConsumerManager();
 
@@ -34,6 +37,10 @@ public interface KafkaRestContext {
 
   default Producer<byte[], byte[]> getProducer() {
     return getProducerPool().getProducer();
+  }
+
+  default Producer<String, GenericRecord> getProducerGeneric() {
+    return getProducerGenericPool().getGenericProducer();
   }
 
   default SchemaRegistryClient getSchemaRegistryClient() {

@@ -38,6 +38,7 @@ import io.confluent.kafkarest.common.CompletableFutures;
 import io.confluent.kafkarest.controllers.ProduceController;
 import io.confluent.kafkarest.controllers.RecordSerializer;
 import io.confluent.kafkarest.controllers.SchemaManager;
+import io.confluent.kafkarest.controllers.ProduceGenericController;
 import io.confluent.kafkarest.entities.EmbeddedFormat;
 import io.confluent.kafkarest.entities.ProduceResult;
 import io.confluent.kafkarest.entities.v2.PartitionOffset;
@@ -150,10 +151,12 @@ public class TopicsResourceBinaryProduceTest
 
   @Mock private ProduceController produceController;
 
+  @Mock private ProduceGenericController produceGenericController;
+
   public TopicsResourceBinaryProduceTest() throws RestConfigException {
     addResource(
         new ProduceToTopicAction(
-            () -> schemaManager, () -> recordSerializer, () -> produceController));
+            () -> schemaManager, () -> recordSerializer, () -> produceController, () -> produceGenericController));
   }
 
   private Response produceToTopic(
