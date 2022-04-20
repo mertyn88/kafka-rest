@@ -4,6 +4,9 @@ Lific-Liam Custom
 스키마레지스트리를 통한 데이터 변환과 Validate를 수행하는 기능을 추가한다.  
 
 
+Bind 
+------------
+
 
 
 

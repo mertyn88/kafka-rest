@@ -43,7 +43,7 @@ import static java.util.Objects.requireNonNull;
 final class SchemaManagerImpl implements SchemaManager {
   private final SchemaRegistryClient schemaRegistryClient;
   private final SubjectNameStrategy defaultSubjectNameStrategy;
-  private static Map<String, Pair<Integer, org.apache.avro.Schema>> subjectCache;
+  static Map<String, Pair<Integer, org.apache.avro.Schema>> subjectCache;
 
   private static final Logger log = LoggerFactory.getLogger(SchemaManager.class);
 
