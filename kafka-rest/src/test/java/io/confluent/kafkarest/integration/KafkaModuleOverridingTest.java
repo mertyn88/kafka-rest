@@ -28,10 +28,7 @@ import static org.easymock.EasyMock.strictMock;
 import static org.easymock.EasyMock.verify;
 import static org.junit.Assert.assertEquals;
 
-import io.confluent.kafkarest.KafkaRestConfig;
-import io.confluent.kafkarest.KafkaRestContext;
-import io.confluent.kafkarest.ProducerPool;
-import io.confluent.kafkarest.Versions;
+import io.confluent.kafkarest.*;
 import io.confluent.kafkarest.common.KafkaFutures;
 import io.confluent.kafkarest.entities.ConsumerInstanceConfig;
 import io.confluent.kafkarest.entities.v2.CreateConsumerInstanceRequest;
@@ -168,6 +165,11 @@ public class KafkaModuleOverridingTest {
 
     @Override
     public ProducerPool getProducerPool() {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public ProducerGenericPool getProducerGenericPool() {
       throw new UnsupportedOperationException();
     }
 

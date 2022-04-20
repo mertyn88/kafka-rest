@@ -1,3 +1,77 @@
+Lific-Liam Custom
+================
+라이픽-검색에 관한 전용 헤더 타입을 만들고,  
+스키마레지스트리를 통한 데이터 변환과 Validate를 수행하는 기능을 추가한다.  
+
+
+Add Custom history
+------------
+<u>java/io/confluent/kafkarest/DefaultKafkaRestContext.java</u>
+* 생성자에 `ProducerGenericPool` 추가
+* Override 관련 메소드 추가
+  * 여기서 `Key/Value Serialize` 설정이 추가되어야 한다.
+
+<u>java/io/confluent/kafkarest/KafkaRestContext.java</u>
+* 인터페이스에 메소드 `getGenericProducer()`를 정의한다.
+
+<u>java/io/confluent/kafkarest/ProducerGenericPool.java</u>
+* **genericProducer**를 정의한다. 이때 타입은 `<String, GenericRecord>` 이다.
+* 기존 **Producer**는 `<byte[], byte[]>`로 정의되어 있다.
+
+<u>java/io/confluent/kafkarest/backends/kafka/KafkaModule.java</u>
+* **ProducerGenericFactory** 팩토리를 구성한다.
+* 구성된 **ProducerGenericFactory**를 `bindFactory` 한다.
+
+<u>java/io/confluent/kafkarest/controllers/ProduceGenericController.java</u>
+* 프로듀싱할 커스텀 인터페이스 클래스를 정의한다.
+  * 여기서 정의된 메소드는 기존 **ProducerController**와 동일한 **produce**
+  * 단, 파라미터타입은 `(String, GenericRecord)`
+
+<u>java/io/confluent/kafkarest/controllers/ProduceGenericControllerImpl.java</u>
+* 인터페이스의 메소드를 구현한다.
+  * 이때 전송하는 방식은 shover의 전송방식과 동일하게 한다.
+  * 해당 코드에서 Producer의 `value타입이 avro`로 되어 있고, 전송 객체가 `GenericRecord`이면, 스키마 비교가 이루어진다
+
+<u>java/io/confluent/kafkarest/controllers/ControllersModule.java</u>
+* 모듈에 인터페이스의 구현체를 bind한다.
+  * 이때 **ProducerGenericController**는 **ProducerGenericControllerImpl** (코드 자체가 그런데 1:1 대응으로 보인다)
+
+<u>java/io/confluent/kafkarest/controllers/SchemaManager.java</u>
+* 스키마레지스트리의 객체를 가지고 있는 SchemaManagerIml 클래스가, protected로 되어 있으므로 **객체 변환을 통해 다른 메소드를 사용할 수 없다. 해서 인터페이스에 메소드를 추가 정의**한다.
+* 또는 SchemaManagerImpl의 `접근지시 레벨을 Public으로 변경`해도 된다. (여기서는 설계를 깨드리기 싫어서 인터페이스 메소드 추가)
+
+<u>java/io/confluent/kafkarest/controllers/SchemaManagerImpl.java</u>
+* 스키마레지스트리의 subject의 정보를 가지고 있는 Map을 선언한다. 
+* 일치되는 토픽명과 조회가 가능하며 스키마레지스트리 조회시 "-value" 형태로 가져온다. (**TopicNameStrategy**)
+* 초기에는 Map의 정보가 없을 때, 최초 적재 작업을 한다.
+  * 이후에는 스키마 레지스트리가 변동되어도 업데이트가 이루어지지 않으므로, **리프레쉬 할 수 있는 메소드를 구현**한다.
+  * 이때 메소드의 반환값은 `CompletableFuture`이다. (추후 컨트롤러의 반환값 통일)
+
+<u>java/io/confluent/kafkarest/resources/v2/AbstractProduceAction.java</u>
+* 생성자에 빈으로 등록한 **ProduceGenericController**을 추가한다.
+* 실질적인 데이터 컨버팅이 되는 메소드를 작성한다. ( `produceGenericSchema` )
+  * **Work 1.** 스키마레지스트리에서 가져온 subject Map에서 스키마 정보를 가져온다.
+  * **Work 2.** 실제 입력된 데이터와 스키마 정보를 비교하여 `GenericRecord` 데이터를 구성한다. (이때 입력 데이터는 `List` 형태로 받으므로 반환 데이터도 `List`로 한다.)
+  * **Work 3.** Producer<String, GenericRecord>으로 구성한 객체로 전송을 하며 이때 `Avro 데이터로 Serialize` 하여 전송한다.
+    * __*해당 부분에서 만들어진 GenericRecord의 데이터가 스키마레지스트리에 정의된 채로 만들어 지지 않으면 예외를 일으킨다.*__
+
+<u>java/io/confluent/kafkarest/resources/v2/ProduceToTopicAction.java</u>
+* 클라이언트가 구현된 로직에 적용되도록 설정한다.
+* 이때 Rest API의 content-type을 통해서 여러 조건이 가능한데 추가된 다음의 값을 설정한다.
+  * **HEADERS** -> `application/vnd.kafka.lific.search.v2+json`
+  * **METHOD** -> `POST`
+  * **URL** -> `/topics/dev-data-benefit-coupon-consumer`
+  * **DATA** -> `{ "records": [ { "value": { "[FIELD]": [VALUE] } } ] }`
+
+<u>java/io/confluent/kafkarest/resources/v2/SchemaResource.java</u>
+* 운영중인 상태에서 스키마 레지스트리가 변경될때, 해당 맵의 스키마 정보를 `refresh`할 수 있는 리소스를 추가한다.
+* refresh 할때, 맵의 key값은 subject의 값인데 해당 데이터를 List형태로 적용중인 스키마 정보를 보여준다.
+
+<u>java/io/confluent/kafkarest/resources/v2/V2ResourcesFeature.java</u>
+* 클라이언트가 접속할 수 있는 URL을 등록한다. ( 해당 작업이 없으면 접근이 안됨 )
+
+---
+
 Kafka REST Proxy
 ================
 

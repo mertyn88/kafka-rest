@@ -15,10 +15,6 @@
 
 package io.confluent.kafkarest.controllers;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static java.util.Collections.emptyList;
-import static java.util.Objects.requireNonNull;
-
 import io.confluent.kafka.schemaregistry.ParsedSchema;
 import io.confluent.kafka.schemaregistry.client.SchemaMetadata;
 import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
@@ -28,18 +24,32 @@ import io.confluent.kafka.serializers.subject.strategy.SubjectNameStrategy;
 import io.confluent.kafkarest.Errors;
 import io.confluent.kafkarest.entities.EmbeddedFormat;
 import io.confluent.kafkarest.entities.RegisteredSchema;
-import java.io.IOException;
-import java.util.Optional;
-import javax.inject.Inject;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.kafka.common.errors.SerializationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.inject.Inject;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+
+import static com.google.common.base.Preconditions.checkArgument;
+import static java.util.Collections.emptyList;
+import static java.util.Objects.requireNonNull;
 
 final class SchemaManagerImpl implements SchemaManager {
   private final SchemaRegistryClient schemaRegistryClient;
   private final SubjectNameStrategy defaultSubjectNameStrategy;
+  static Map<String, Pair<Integer, org.apache.avro.Schema>> subjectCache = new HashMap<>();
+
+  private static final Logger log = LoggerFactory.getLogger(SchemaManager.class);
 
   @Inject
-  SchemaManagerImpl(
-      SchemaRegistryClient schemaRegistryClient, SubjectNameStrategy defaultSubjectNameStrategy) {
+  SchemaManagerImpl(SchemaRegistryClient schemaRegistryClient, SubjectNameStrategy defaultSubjectNameStrategy) {
     this.schemaRegistryClient = requireNonNull(schemaRegistryClient);
     this.defaultSubjectNameStrategy = requireNonNull(defaultSubjectNameStrategy);
   }
@@ -263,5 +273,40 @@ final class SchemaManagerImpl implements SchemaManager {
     }
 
     return subject;
+  }
+
+  //Custom Liam
+  @Override
+  public Map<String, Pair<Integer, org.apache.avro.Schema>> setSchemaSubject() {
+    try {
+      for(String subject : schemaRegistryClient.getAllSubjects()) {
+        SchemaMetadata schema = schemaRegistryClient.getLatestSchemaMetadata(subject);
+        subjectCache.put(subject, Pair.of(schema.getVersion(), new org.apache.avro.Schema.Parser().parse(schema.getSchema())));
+        log.info(schema.getSchema());
+      }
+    } catch (RestClientException | IOException e) {
+      e.printStackTrace();
+    }
+
+    return subjectCache;
+  }
+
+  @Override
+  public CompletableFuture<Map<String, Pair<Integer, org.apache.avro.Schema>>> refreshSchemaSubject() {
+    return CompletableFuture.completedFuture(setSchemaSubject());
+  }
+
+  // schema-registry TopicNameStrategy
+  // Subject format plus “-key” or “-value” depending on configuration
+  @Override
+  public Pair<Integer, org.apache.avro.Schema> getRegistrySchema(String topic) {
+    if(subjectCache == null || subjectCache.size() == 0) {
+      try {
+        subjectCache = refreshSchemaSubject().get();
+      }catch (ExecutionException | InterruptedException e) {
+        e.printStackTrace();
+      }
+    }
+    return subjectCache.getOrDefault(topic + "-value", null);
   }
 }

@@ -18,7 +18,12 @@ package io.confluent.kafkarest.controllers;
 import io.confluent.kafka.serializers.subject.strategy.SubjectNameStrategy;
 import io.confluent.kafkarest.entities.EmbeddedFormat;
 import io.confluent.kafkarest.entities.RegisteredSchema;
+import org.apache.avro.Schema;
+import org.apache.commons.lang3.tuple.Pair;
+
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /** A manager for Schema Registry {@link RegisteredSchema schemas}. */
 public interface SchemaManager {
@@ -65,4 +70,8 @@ public interface SchemaManager {
       Optional<Integer> schemaVersion,
       Optional<String> rawSchema,
       boolean isKey);
+
+  Pair<Integer, Schema> getRegistrySchema(String topic);
+  CompletableFuture<Map<String, Pair<Integer, Schema>>> refreshSchemaSubject();
+  Map<String, Pair<Integer, org.apache.avro.Schema>> setSchemaSubject();
 }

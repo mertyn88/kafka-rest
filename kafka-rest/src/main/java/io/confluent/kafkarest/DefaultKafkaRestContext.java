@@ -20,16 +20,22 @@ import static java.util.Objects.requireNonNull;
 
 import io.confluent.kafka.schemaregistry.client.CachedSchemaRegistryClient;
 import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
+import io.confluent.kafka.serializers.KafkaAvroSerializer;
 import io.confluent.kafkarest.config.SchemaRegistryConfig;
 import io.confluent.kafkarest.v2.KafkaConsumerManager;
 import java.net.URI;
 import java.util.List;
+import java.util.Properties;
 import java.util.stream.Collectors;
+
+import org.apache.avro.generic.GenericRecord;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
+import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,6 +58,7 @@ public class DefaultKafkaRestContext implements KafkaRestContext {
   public DefaultKafkaRestContext(
       KafkaRestConfig config,
       ProducerPool producerPool,
+      ProducerGenericPool producerGenericPool,
       KafkaConsumerManager kafkaConsumerManager) {
     this(config);
   }
@@ -71,6 +78,12 @@ public class DefaultKafkaRestContext implements KafkaRestContext {
     return new ProducerPool(getProducer());
   }
 
+  // Add Liam
+  @Override
+  public ProducerGenericPool getProducerGenericPool() {
+    return new ProducerGenericPool(getProducerGeneric());
+  }
+
   @Override
   public synchronized KafkaConsumerManager getKafkaConsumerManager() {
     if (kafkaConsumerManager == null) {
@@ -88,6 +101,15 @@ public class DefaultKafkaRestContext implements KafkaRestContext {
   public Producer<byte[], byte[]> getProducer() {
     return new KafkaProducer<>(
         config.getProducerConfigs(), new ByteArraySerializer(), new ByteArraySerializer());
+  }
+
+  // Add Liam
+  @Override
+  public Producer<String, GenericRecord> getProducerGeneric() {
+    Properties properties = config.getProducerProperties();
+    properties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+    properties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, KafkaAvroSerializer.class.getName());
+    return new KafkaProducer<>(properties);
   }
 
   @Override
