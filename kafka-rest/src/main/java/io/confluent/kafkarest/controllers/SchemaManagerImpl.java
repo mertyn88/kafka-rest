@@ -34,6 +34,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Collections.emptyList;
@@ -47,13 +48,9 @@ final class SchemaManagerImpl implements SchemaManager {
   private static final Logger log = LoggerFactory.getLogger(SchemaManager.class);
 
   @Inject
-  SchemaManagerImpl(
-      SchemaRegistryClient schemaRegistryClient, SubjectNameStrategy defaultSubjectNameStrategy) {
+  SchemaManagerImpl(SchemaRegistryClient schemaRegistryClient, SubjectNameStrategy defaultSubjectNameStrategy) {
     this.schemaRegistryClient = requireNonNull(schemaRegistryClient);
     this.defaultSubjectNameStrategy = requireNonNull(defaultSubjectNameStrategy);
-
-    // Init
-    refreshSchemaSubject();
   }
 
   @Override
@@ -295,14 +292,17 @@ final class SchemaManagerImpl implements SchemaManager {
   }
 
   @Override
-  public void refreshSchemaSubject() {
-    subjectCache = setSchemaSubject();
+  public CompletableFuture<Map<String, Pair<Integer, org.apache.avro.Schema>>> refreshSchemaSubject() {
+    return CompletableFuture.completedFuture(setSchemaSubject());
   }
 
   // schema-registry TopicNameStrategy
   // Subject format plus “-key” or “-value” depending on configuration
   @Override
   public Pair<Integer, org.apache.avro.Schema> getRegistrySchema(String topic) {
+    if(subjectCache == null || subjectCache.size() == 0) {
+      refreshSchemaSubject();
+    }
     return subjectCache.getOrDefault(topic + "-value", null);
   }
 }

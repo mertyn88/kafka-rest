@@ -23,6 +23,7 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /** A manager for Schema Registry {@link RegisteredSchema schemas}. */
 public interface SchemaManager {
@@ -71,7 +72,6 @@ public interface SchemaManager {
       boolean isKey);
 
   Pair<Integer, Schema> getRegistrySchema(String topic);
-  void refreshSchemaSubject();
-  Map<String, Pair<Integer, Schema>> setSchemaSubject();
-
+  CompletableFuture<Map<String, Pair<Integer, Schema>>> refreshSchemaSubject();
+  Map<String, Pair<Integer, org.apache.avro.Schema>> setSchemaSubject();
 }
