@@ -126,7 +126,7 @@ abstract class AbstractProduceAction {
           record.put(schemaField.name(), node.asText());
       }
     }else {
-      if(schemaField.name().equals("datetime")) {
+      if(schemaField.name().equals("datetime") || schemaField.name().equals("timestamp")) {
         record.put(schemaField.name(), LocalDateTime.now().toString());
       } else if(schemaField.defaultVal() != null) {
         record.put(schemaField.name(), schemaField.defaultVal());

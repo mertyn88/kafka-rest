@@ -17,12 +17,17 @@ package io.confluent.kafkarest.resources.v2;
 
 import io.confluent.kafkarest.Versions;
 import io.confluent.kafkarest.extension.ResourceAccesslistFeature.ResourceName;
+import io.confluent.kafkarest.resources.AsyncResponses;
 import io.confluent.rest.annotations.PerformanceMetric;
 
 import javax.validation.Valid;
 import javax.ws.rs.*;
+import javax.ws.rs.container.AsyncResponse;
+import javax.ws.rs.container.Suspended;
+import javax.ws.rs.core.Response;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @Path("/")
 @Produces({Versions.KAFKA_V2_JSON_WEIGHTED})
@@ -47,5 +52,14 @@ public final class RootResource {
   public Map<String, String> post(@Valid Map<String, String> request) {
     // This version allows testing with posted entities
     return new HashMap<>();
+  }
+
+  @GET
+  @Path("/status")
+  @PerformanceMetric("root.status+v2")
+  @ResourceName("api.v2.root.status")
+  public void status(@Suspended AsyncResponse asyncResponse) {
+
+    AsyncResponses.asyncResume(asyncResponse, CompletableFuture.completedFuture(Response.Status.OK));
   }
 }
