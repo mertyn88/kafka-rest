@@ -16,9 +16,9 @@
     <version>7.1.0</version>
     <organization>
         <name>Confluent, Inc.</name>
-        <url>http://confluent.io</url>
+        <url>https://confluent.io</url>
     </organization>
-    <url>http://confluent.io</url>
+    <url>https://confluent.io</url>
     <description>
         The Kafka REST Proxy provides a RESTful interface to a Kafka cluster, making it easy to
         produce and consume messages, view the state of the cluster, and perform administrative
@@ -28,7 +28,7 @@
     <licenses>
         <license>
             <name>Confluent Community License</name>
-            <url>http://www.confluent.io/confluent-community-license</url>
+            <url>https://www.confluent.io/confluent-community-license</url>
             <distribution>repo</distribution>
         </license>
     </licenses>
@@ -54,7 +54,7 @@
         <repository>
             <id>confluent</id>
             <name>Confluent</name>
-            <url>http://packages.confluent.io/maven/</url>
+            <url>https://packages.confluent.io/maven/</url>
         </repository>
     </repositories>
 
