@@ -133,7 +133,7 @@ pipeline {
             }
             post {
                 failure {
-                    sendFailMessage('STEP 4. Failure ECR ECR Upload')
+                    sendFailMessage('STEP 4. Failure ECR Upload')
                 }
             }
         }
