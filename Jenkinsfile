@@ -76,13 +76,15 @@ pipeline {
 
         stage('Project build') {
             steps {
-                sh """
-                    mvn clean install -DskipTests -Dcheckstyle.skip -Dspotless.check.skip=true
-                """
+                withMaven {
+                    sh """
+                        mvn clean install -DskipTests -Dcheckstyle.skip -Dspotless.check.skip=true
+                    """
+                }
             }
             post {
                 failure {
-                    sendFailMessage('STEP 1. Failure gradle build')
+                    sendFailMessage('STEP 1. Failure Maven build')
                 }
             }
         }
