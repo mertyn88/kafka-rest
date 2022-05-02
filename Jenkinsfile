@@ -62,7 +62,7 @@ pipeline {
         buildDiscarder logRotator(artifactDaysToKeepStr: '', artifactNumToKeepStr: '30', daysToKeepStr: '30', numToKeepStr: '')
     }
     tools {
-        maven 'apache-maven-3.8.5'
+        maven 'Maven 3.8.5'
         jdk 'JAVA 11'
     }
 
