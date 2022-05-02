@@ -50,7 +50,7 @@ pipeline {
     parameters {
         string(name : 'PROJECT', defaultValue : 'kafka-rest', description : '프로젝트명')
         choice(name : 'MODULE', choices: ['kafka-rest'], description: '멀티모듈명')
-        choice(name : 'DEPLOY', choices: ['true'], description: 'EKS 배포 여부')
+        choice(name : 'DEPLOY', choices: ['true', 'false'], description: 'EKS 배포 여부')
     }
     environment {
         ECR = "697736665449.dkr.ecr.ap-northeast-2.amazonaws.com"
@@ -153,7 +153,7 @@ pipeline {
             steps {
                 sh """
                     aws eks --region ${REGION} update-kubeconfig --name ${ENV}-lific-eks
-                    /usr/local/bin/kubectl -n ${ENV} rollout restart deployment ${params.PROJECT}-${params.MODULE}
+                    /usr/local/bin/kubectl -n ${ENV} rollout restart deployment ${params.MODULE}
                 """
             }
             post {
