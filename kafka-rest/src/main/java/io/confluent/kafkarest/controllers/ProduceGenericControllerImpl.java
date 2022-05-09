@@ -19,12 +19,14 @@ import io.confluent.kafkarest.entities.ProduceResult;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.errors.SerializationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import static java.util.Objects.requireNonNull;
 
@@ -42,16 +44,15 @@ final class ProduceGenericControllerImpl implements ProduceGenericController {
     @Override
     public CompletableFuture<ProduceResult> produce(String topic, GenericRecord genericRecord) {
         CompletableFuture<ProduceResult> result = new CompletableFuture<>();
-        genericProducer.send( new ProducerRecord<>(topic, genericRecord)
-                , (metadata, exception) -> {
-                    if (exception != null) {
-                        log.debug("Received exception from kafka", exception);
-                        result.completeExceptionally(exception);
-                    } else {
-                        log.debug("Received response from kafka");
-                        result.complete(ProduceResult.fromRecordMetadata(metadata, Instant.now()));
-                    }
-                });
+        try {
+            log.debug("Received response from kafka");
+            result.complete(ProduceResult.fromRecordMetadata(genericProducer.send(new ProducerRecord<>(topic, genericRecord)).get(), Instant.now()));
+        }catch (SerializationException | ExecutionException | InterruptedException e) {
+            log.error("Received exception from kafka", e);
+            result.completeExceptionally(e);
+            //e.printStackTrace();
+        }
+
         return result;
     }
 }
