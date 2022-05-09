@@ -37,7 +37,8 @@ public class Versions {
   public static final String KAFKA_V2_JSON_JSON_WEIGHTED_LOW = KAFKA_V2_JSON_JSON + "; qs=0.1";
 
   // Add Liam
-  public static final String KAFKA_V2_LIFIC_SEARCH_JSON = "application/vnd.kafka.lific.search.v2+json";
+  //public static final String KAFKA_V2_LIFIC_SEARCH_JSON = "application/vnd.kafka.lific.search.v2+json";
+  public static final String KAFKA_V2_LIFIC_SEARCH_JSON = "application/json;charset=UTF-8";
   public static final String KAFKA_V2_LIFIC_SEARCH_JSON_WEIGHTED_LOW = KAFKA_V2_LIFIC_SEARCH_JSON + "; qs=0.1";
 
   public static final String KAFKA_V2_JSON_JSON_SCHEMA = "application/vnd.kafka.jsonschema.v2+json";

@@ -82,7 +82,7 @@ abstract class AbstractProduceAction {
     Pair<Integer, Schema> schema = this.schemaManager.get().getRegistrySchema(topic);
     // Work 2. Convert schema -> GenericRecord
     List<GenericRecord> genericRecords = getGenericRecords(schema.getRight(), request.getRecords());
-    // Work 3.
+    // Work 3. Send Kafka
     List<CompletableFuture<ProduceResult>> resultFutures = doProduceGeneric(topic, genericRecords);
 
     return produceResultsToResponse(Optional.empty(), Optional.empty(), resultFutures);

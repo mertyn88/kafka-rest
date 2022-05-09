@@ -3,8 +3,51 @@ Lific-Liam Custom
 라이픽-검색에 관한 전용 헤더 타입을 만들고,  
 스키마레지스트리를 통한 데이터 변환과 Validate를 수행하는 기능을 추가한다.  
 
+Add Custom history (2022.05.09)
+------------
+<u>java/io/confluent/kafkarest/Versions.java</u>
+* Content-type 공통 헤더로 변경 ( 요청 건 )
+  * 기존 `application/vnd.kafka.lific.search.v2+json`에서 `application/json;charset=UTF-8`로 변경
 
-Add Custom history
+<u>java/io/confluent/kafkarest/controllers/ProduceGenericControllerImpl.java</u>  
+>예외 발생시 Response가 성공시와 같은 형태로 오지 않는다. 확인 결과, Producer의 send시 예외가 발생하였을 경우 로직이 수행되질 않는다.  
+Producer에서 Send이전, `Serialize` 체크 단계에서 예외가 발생하여 CallBack까지 가질 않는듯 하다. 해서 예외처리 로직을 변경한다.  
+* try - catch로 발생할 수 있는 예외 직접 Hadling (`SerializationException`, `ExecutionException`, `InterruptedException`)
+* catch 단계에서 error loging 후 `CompletableFuture completeExceptionally` 처리  
+
+```bash
+# 정상 스키마 [{"value": {"id": "test","date": "test"}}]}
+curl "http://localhost:18094/topics/test-hadoop-hdfs" \
+  -X POST \
+  -d '{"records": [{"value": {"i": "test","date": "test"}}]}' \
+  -H "Content-Type: application/json;charset=UTF-8" 
+```
+
+AS-IS
+```json
+{
+  "error_code": 40801,
+  "message": "Error serializing Avro message"
+}
+```
+TO-BE
+```json
+{
+  "offsets": [
+    {
+      "partition": null,
+      "offset": null,
+      "error_code": 50002,
+      "error": "Error serializing Avro message"
+    }
+  ],
+  "key_schema_id": null,
+  "value_schema_id": null
+}
+```
+
+
+Add Custom history (2022.04.20)
 ------------
 <u>java/io/confluent/kafkarest/DefaultKafkaRestContext.java</u>
 * 생성자에 `ProducerGenericPool` 추가
