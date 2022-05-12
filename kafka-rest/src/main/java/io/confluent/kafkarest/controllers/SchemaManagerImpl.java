@@ -282,7 +282,7 @@ final class SchemaManagerImpl implements SchemaManager {
       for(String subject : schemaRegistryClient.getAllSubjects()) {
         SchemaMetadata schema = schemaRegistryClient.getLatestSchemaMetadata(subject);
         subjectCache.put(subject, Pair.of(schema.getVersion(), new org.apache.avro.Schema.Parser().parse(schema.getSchema())));
-        log.info(schema.getSchema());
+        //log.info(schema.getSchema());
       }
     } catch (RestClientException | IOException e) {
       e.printStackTrace();
