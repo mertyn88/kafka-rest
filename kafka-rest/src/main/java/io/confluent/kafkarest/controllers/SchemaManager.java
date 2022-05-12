@@ -74,4 +74,5 @@ public interface SchemaManager {
   Pair<Integer, Schema> getRegistrySchema(String topic);
   CompletableFuture<Map<String, Pair<Integer, Schema>>> refreshSchemaSubject();
   Map<String, Pair<Integer, org.apache.avro.Schema>> setSchemaSubject();
+  void timerSchema();
 }

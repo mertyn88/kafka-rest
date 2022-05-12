@@ -16,18 +16,26 @@
 package io.confluent.kafkarest.resources.v2;
 
 import io.confluent.kafkarest.Versions;
+import io.confluent.kafkarest.controllers.SchemaManager;
 import io.confluent.kafkarest.extension.ResourceAccesslistFeature.ResourceName;
 import io.confluent.kafkarest.resources.AsyncResponses;
 import io.confluent.rest.annotations.PerformanceMetric;
 
+import javax.inject.Inject;
+import javax.inject.Provider;
 import javax.validation.Valid;
 import javax.ws.rs.*;
 import javax.ws.rs.container.AsyncResponse;
 import javax.ws.rs.container.Suspended;
 import javax.ws.rs.core.Response;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+
+import static java.util.Objects.requireNonNull;
 
 @Path("/")
 @Produces({Versions.KAFKA_V2_JSON_WEIGHTED})
@@ -54,12 +62,19 @@ public final class RootResource {
     return new HashMap<>();
   }
 
+  private final Provider<SchemaManager> schemaManager;
+
+  @Inject
+  public RootResource(Provider<SchemaManager> schemaManager) {
+    this.schemaManager = requireNonNull(schemaManager);
+  }
+
   @GET
   @Path("/status")
   @PerformanceMetric("root.status+v2")
   @ResourceName("api.v2.root.status")
-  public void status(@Suspended AsyncResponse asyncResponse) {
-
+  public void status(@Suspended AsyncResponse asyncResponse) throws ExecutionException, InterruptedException {
+    this.schemaManager.get().timerSchema();
     AsyncResponses.asyncResume(asyncResponse, CompletableFuture.completedFuture(Response.Status.OK));
   }
 }
