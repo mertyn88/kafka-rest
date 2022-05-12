@@ -30,6 +30,7 @@ public final class V2ResourcesFeature implements Feature {
     configurable.register(RootResource.class);
     configurable.register(TopicsResource.class);
     configurable.register(SchemaResource.class);
+    configurable.register(ProduceToCustom.class);
     return true;
   }
 }

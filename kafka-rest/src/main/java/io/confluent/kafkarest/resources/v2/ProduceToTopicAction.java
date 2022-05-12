@@ -42,7 +42,6 @@ import java.util.concurrent.CompletableFuture;
 @Consumes({
   Versions.KAFKA_V2_JSON_BINARY,
   Versions.KAFKA_V2_JSON_JSON,
-  Versions.KAFKA_V2_LIFIC_SEARCH_JSON,
   Versions.KAFKA_V2_JSON_AVRO,
   Versions.KAFKA_V2_JSON_PROTOBUF,
   Versions.KAFKA_V2_JSON_JSON_SCHEMA
@@ -97,22 +96,6 @@ public final class ProduceToTopicAction extends AbstractProduceAction {
         .entity(response)
         .status(ProduceResponse::getRequestStatus)
         .asyncResume(asyncResponse);
-  }
-
-  @POST
-  @Path("/{topic}")
-  @PerformanceMetric("topic.produce-lific.search+v2")
-  @Consumes({Versions.KAFKA_V2_LIFIC_SEARCH_JSON_WEIGHTED_LOW})
-  @ResourceName("api.v2.produce-to-topic.lific.search")
-  public void produceCustomLific(
-          @Suspended AsyncResponse asyncResponse,
-          @PathParam("topic") String topic,
-          @Valid @NotNull ProduceRequest request) {
-    CompletableFuture<ProduceResponse> response = produceGenericSchema(topic, request);
-    AsyncResponseBuilder.<ProduceResponse>from(Response.ok())
-            .entity(response)
-            .status(ProduceResponse::getRequestStatus)
-            .asyncResume(asyncResponse);
   }
 
   @POST

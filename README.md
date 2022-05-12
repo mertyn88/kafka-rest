@@ -3,6 +3,36 @@ Lific-Liam Custom
 라이픽-검색에 관한 전용 헤더 타입을 만들고,  
 스키마레지스트리를 통한 데이터 변환과 Validate를 수행하는 기능을 추가한다.  
 
+Add Custom history (2022.05.21)
+------------
+<u>io.confluent.kafkarest.resources.v2.ProduceToCustom.java</u>
+* Lific custom 기능 분리
+  * `API Url path` 변경 (`topics -> /consumer/kafka-rest/topics`)
+  * `Url Header - Accept` 허용 및 추가
+
+> Request시에 Content-Type, Accept 모두 다음과 같이 지정해야 한다.  
+> __**application/json;charset=UTF-8**__
+
+<u>io.confluent.kafkarest.resources.v2.V2ResourcesFeature.java</u>
+* 변경된 `API Url path`에 대해 등록 처리
+
+```json
+# POST         - ${kafka_rest}/consumer/kafka-rest/topics/${topic}
+# Content-Type - application/json;charset=UTF-8;
+# Accept       - application/json;charset=UTF-8;
+{
+    "records": [
+        {
+            "value": {
+              "id": "test",
+              "date": "test"
+            }
+        }
+    ]
+}
+```
+
+
 Add Custom history (2022.05.09)
 ------------
 <u>java/io/confluent/kafkarest/Versions.java</u>

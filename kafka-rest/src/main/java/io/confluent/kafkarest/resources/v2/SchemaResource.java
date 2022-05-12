@@ -32,12 +32,13 @@ import javax.ws.rs.container.Suspended;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import static java.util.Objects.requireNonNull;
 
 @Path("/schema")
-@Consumes({Versions.KAFKA_V2_JSON})
-@Produces({Versions.KAFKA_V2_JSON})
+@Consumes({Versions.KAFKA_V2_LIFIC_SEARCH_JSON})
+@Produces({Versions.KAFKA_V2_LIFIC_SEARCH_JSON})
 @ResourceName("api.v2.schema.*")
 public final class SchemaResource {
 
@@ -52,10 +53,11 @@ public final class SchemaResource {
   @Path("/refresh")
   @PerformanceMetric("schema.refresh+v2")
   @ResourceName("api.v2.schema.refresh")
-  public void refresh(@Suspended AsyncResponse asyncResponse) {
+  public void refresh(@Suspended AsyncResponse asyncResponse) throws ExecutionException, InterruptedException {
     CompletableFuture<List<String>> response =
     this.schemaManager.get().refreshSchemaSubject()
             .thenApply(subjects -> new ArrayList<>(subjects.keySet()));
+    System.out.println("Schema refresh " + response.get());
     AsyncResponses.asyncResume(asyncResponse, response);
   }
 }
