@@ -5,6 +5,10 @@ Lific-Liam Custom
 
 Add Custom history (2022.05.21)
 ------------
+<u>io.confluent.kafkarest.controllers.SchemaManagerImpl.java;</u>
+* Status 수행시 Java timer 시작
+  * 5분에 한번씩 수행되어 schema registry refresh
+
 <u>io.confluent.kafkarest.resources.v2.ProduceToCustom.java</u>
 * Lific custom 기능 분리
   * `API Url path` 변경 (`topics -> /consumer/kafka-rest/topics`)

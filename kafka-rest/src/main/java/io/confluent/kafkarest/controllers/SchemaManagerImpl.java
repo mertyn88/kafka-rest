@@ -31,9 +31,8 @@ import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.time.LocalDateTime;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -42,271 +41,289 @@ import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
 
 final class SchemaManagerImpl implements SchemaManager {
-  private final SchemaRegistryClient schemaRegistryClient;
-  private final SubjectNameStrategy defaultSubjectNameStrategy;
-  static Map<String, Pair<Integer, org.apache.avro.Schema>> subjectCache = new HashMap<>();
+    private final SchemaRegistryClient schemaRegistryClient;
+    private final SubjectNameStrategy defaultSubjectNameStrategy;
+    static Map<String, Pair<Integer, org.apache.avro.Schema>> subjectCache = new HashMap<>();
+    static Boolean isTimer = false;
 
-  private static final Logger log = LoggerFactory.getLogger(SchemaManager.class);
+    private static final Logger log = LoggerFactory.getLogger(SchemaManager.class);
 
-  @Inject
-  SchemaManagerImpl(SchemaRegistryClient schemaRegistryClient, SubjectNameStrategy defaultSubjectNameStrategy) {
-    this.schemaRegistryClient = requireNonNull(schemaRegistryClient);
-    this.defaultSubjectNameStrategy = requireNonNull(defaultSubjectNameStrategy);
-  }
-
-  @Override
-  public RegisteredSchema getSchema(
-      String topicName,
-      Optional<EmbeddedFormat> format,
-      Optional<String> subject,
-      Optional<SubjectNameStrategy> subjectNameStrategy,
-      Optional<Integer> schemaId,
-      Optional<Integer> schemaVersion,
-      Optional<String> rawSchema,
-      boolean isKey) {
-    // (subject|subjectNameStrategy)?, schemaId
-    if (schemaId.isPresent()) {
-      checkArgument(!format.isPresent());
-      checkArgument(!schemaVersion.isPresent());
-      checkArgument(!rawSchema.isPresent());
-      return getSchemaFromSchemaId(topicName, subject, subjectNameStrategy, schemaId.get(), isKey);
+    @Inject
+    SchemaManagerImpl(SchemaRegistryClient schemaRegistryClient, SubjectNameStrategy defaultSubjectNameStrategy) {
+        this.schemaRegistryClient = requireNonNull(schemaRegistryClient);
+        this.defaultSubjectNameStrategy = requireNonNull(defaultSubjectNameStrategy);
     }
 
-    // (subject|subjectNameStrategy)?, schemaVersion
-    if (schemaVersion.isPresent()) {
-      checkArgument(!format.isPresent());
-      checkArgument(!rawSchema.isPresent());
-      return getSchemaFromSchemaVersion(
-          topicName, subject, subjectNameStrategy, schemaVersion.get(), isKey);
+    @Override
+    public RegisteredSchema getSchema(
+            String topicName,
+            Optional<EmbeddedFormat> format,
+            Optional<String> subject,
+            Optional<SubjectNameStrategy> subjectNameStrategy,
+            Optional<Integer> schemaId,
+            Optional<Integer> schemaVersion,
+            Optional<String> rawSchema,
+            boolean isKey) {
+        // (subject|subjectNameStrategy)?, schemaId
+        if (schemaId.isPresent()) {
+            checkArgument(!format.isPresent());
+            checkArgument(!schemaVersion.isPresent());
+            checkArgument(!rawSchema.isPresent());
+            return getSchemaFromSchemaId(topicName, subject, subjectNameStrategy, schemaId.get(), isKey);
+        }
+
+        // (subject|subjectNameStrategy)?, schemaVersion
+        if (schemaVersion.isPresent()) {
+            checkArgument(!format.isPresent());
+            checkArgument(!rawSchema.isPresent());
+            return getSchemaFromSchemaVersion(
+                    topicName, subject, subjectNameStrategy, schemaVersion.get(), isKey);
+        }
+
+        // format, (subject|subjectNameStrategy)?, rawSchema
+        if (rawSchema.isPresent()) {
+            checkArgument(format.isPresent());
+            return getSchemaFromRawSchema(
+                    topicName, format.get(), subject, subjectNameStrategy, rawSchema.get(), isKey);
+        }
+
+        // (subject|subjectNameStrategy)?
+        checkArgument(!format.isPresent());
+        return findLatestSchema(topicName, subject, subjectNameStrategy, isKey);
     }
 
-    // format, (subject|subjectNameStrategy)?, rawSchema
-    if (rawSchema.isPresent()) {
-      checkArgument(format.isPresent());
-      return getSchemaFromRawSchema(
-          topicName, format.get(), subject, subjectNameStrategy, rawSchema.get(), isKey);
+    private RegisteredSchema getSchemaFromSchemaId(
+            String topicName,
+            Optional<String> subject,
+            Optional<SubjectNameStrategy> subjectNameStrategy,
+            int schemaId,
+            boolean isKey) {
+        ParsedSchema schema;
+        try {
+            schema = schemaRegistryClient.getSchemaById(schemaId);
+        } catch (IOException | RestClientException e) {
+            throw new SerializationException(
+                    String.format("Error when fetching schema by id. schemaId = %d", schemaId), e);
+        }
+
+        String actualSubject =
+                subject.orElse(
+                        subjectNameStrategy
+                                .orElse(defaultSubjectNameStrategy)
+                                .subjectName(topicName, isKey, schema));
+
+        int schemaVersion = getSchemaVersion(actualSubject, schema);
+
+        return RegisteredSchema.create(actualSubject, schemaId, schemaVersion, schema);
     }
 
-    // (subject|subjectNameStrategy)?
-    checkArgument(!format.isPresent());
-    return findLatestSchema(topicName, subject, subjectNameStrategy, isKey);
-  }
-
-  private RegisteredSchema getSchemaFromSchemaId(
-      String topicName,
-      Optional<String> subject,
-      Optional<SubjectNameStrategy> subjectNameStrategy,
-      int schemaId,
-      boolean isKey) {
-    ParsedSchema schema;
-    try {
-      schema = schemaRegistryClient.getSchemaById(schemaId);
-    } catch (IOException | RestClientException e) {
-      throw new SerializationException(
-          String.format("Error when fetching schema by id. schemaId = %d", schemaId), e);
+    private int getSchemaVersion(String subject, ParsedSchema schema) {
+        try {
+            return schemaRegistryClient.getVersion(subject, schema);
+        } catch (IOException | RestClientException e) {
+            throw new SerializationException(
+                    String.format(
+                            "Error when fetching schema version. subject = %s, schema = %s",
+                            subject, schema.canonicalString()),
+                    e);
+        }
     }
 
-    String actualSubject =
-        subject.orElse(
-            subjectNameStrategy
-                .orElse(defaultSubjectNameStrategy)
-                .subjectName(topicName, isKey, schema));
+    private RegisteredSchema getSchemaFromSchemaVersion(
+            String topicName,
+            Optional<String> subject,
+            Optional<SubjectNameStrategy> subjectNameStrategy,
+            int schemaVersion,
+            boolean isKey) {
+        String actualSubject =
+                subject.orElse(getSchemaSubjectUnsafe(topicName, isKey, subjectNameStrategy));
 
-    int schemaVersion = getSchemaVersion(actualSubject, schema);
+        Schema schema =
+                schemaRegistryClient.getByVersion(
+                        actualSubject, schemaVersion, /* lookupDeletedSchema= */ false);
 
-    return RegisteredSchema.create(actualSubject, schemaId, schemaVersion, schema);
-  }
+        ParsedSchema parsedSchema =
+                EmbeddedFormat.forSchemaType(schema.getSchemaType())
+                        .getSchemaProvider()
+                        .parseSchema(schema.getSchema(), schema.getReferences(), /* isNew= */ false)
+                        .orElseThrow(
+                                () ->
+                                        Errors.invalidSchemaException(
+                                                String.format(
+                                                        "Error when fetching schema by version. subject = %s, version = %d",
+                                                        actualSubject, schemaVersion)));
 
-  private int getSchemaVersion(String subject, ParsedSchema schema) {
-    try {
-      return schemaRegistryClient.getVersion(subject, schema);
-    } catch (IOException | RestClientException e) {
-      throw new SerializationException(
-          String.format(
-              "Error when fetching schema version. subject = %s, schema = %s",
-              subject, schema.canonicalString()),
-          e);
-    }
-  }
-
-  private RegisteredSchema getSchemaFromSchemaVersion(
-      String topicName,
-      Optional<String> subject,
-      Optional<SubjectNameStrategy> subjectNameStrategy,
-      int schemaVersion,
-      boolean isKey) {
-    String actualSubject =
-        subject.orElse(getSchemaSubjectUnsafe(topicName, isKey, subjectNameStrategy));
-
-    Schema schema =
-        schemaRegistryClient.getByVersion(
-            actualSubject, schemaVersion, /* lookupDeletedSchema= */ false);
-
-    ParsedSchema parsedSchema =
-        EmbeddedFormat.forSchemaType(schema.getSchemaType())
-            .getSchemaProvider()
-            .parseSchema(schema.getSchema(), schema.getReferences(), /* isNew= */ false)
-            .orElseThrow(
-                () ->
-                    Errors.invalidSchemaException(
-                        String.format(
-                            "Error when fetching schema by version. subject = %s, version = %d",
-                            actualSubject, schemaVersion)));
-
-    return RegisteredSchema.create(
-        schema.getSubject(), schema.getId(), schemaVersion, parsedSchema);
-  }
-
-  private RegisteredSchema getSchemaFromRawSchema(
-      String topicName,
-      EmbeddedFormat format,
-      Optional<String> subject,
-      Optional<SubjectNameStrategy> subjectNameStrategy,
-      String rawSchema,
-      boolean isKey) {
-    checkArgument(format.requiresSchema(), "%s does not support schemas.", format);
-
-    ParsedSchema schema =
-        format
-            .getSchemaProvider()
-            .parseSchema(rawSchema, /* references= */ emptyList(), /* isNew= */ true)
-            .orElseThrow(
-                () ->
-                    Errors.invalidSchemaException(
-                        String.format(
-                            "Error when parsing raw schema. format = %s, schema = %s",
-                            format, rawSchema)));
-
-    String actualSubject =
-        subject.orElse(
-            subjectNameStrategy
-                .orElse(defaultSubjectNameStrategy)
-                .subjectName(topicName, isKey, schema));
-
-    int schemaId;
-    try {
-      try {
-        // Check if the schema already exists first.
-        schemaId = schemaRegistryClient.getId(actualSubject, schema);
-      } catch (IOException | RestClientException e) {
-        // Could not find the schema. We try to register the schema in that case.
-        schemaId = schemaRegistryClient.register(actualSubject, schema);
-      }
-    } catch (IOException | RestClientException e) {
-      throw new SerializationException(
-          String.format(
-              "Error when registering schema. format = %s, subject = %s, schema = %s",
-              format, actualSubject, schema.canonicalString()),
-          e);
+        return RegisteredSchema.create(
+                schema.getSubject(), schema.getId(), schemaVersion, parsedSchema);
     }
 
-    int schemaVersion = getSchemaVersion(actualSubject, schema);
+    private RegisteredSchema getSchemaFromRawSchema(
+            String topicName,
+            EmbeddedFormat format,
+            Optional<String> subject,
+            Optional<SubjectNameStrategy> subjectNameStrategy,
+            String rawSchema,
+            boolean isKey) {
+        checkArgument(format.requiresSchema(), "%s does not support schemas.", format);
 
-    return RegisteredSchema.create(actualSubject, schemaId, schemaVersion, schema);
-  }
+        ParsedSchema schema =
+                format
+                        .getSchemaProvider()
+                        .parseSchema(rawSchema, /* references= */ emptyList(), /* isNew= */ true)
+                        .orElseThrow(
+                                () ->
+                                        Errors.invalidSchemaException(
+                                                String.format(
+                                                        "Error when parsing raw schema. format = %s, schema = %s",
+                                                        format, rawSchema)));
 
-  private RegisteredSchema findLatestSchema(
-      String topicName,
-      Optional<String> subject,
-      Optional<SubjectNameStrategy> subjectNameStrategy,
-      boolean isKey) {
-    String actualSubject =
-        subject.orElse(getSchemaSubjectUnsafe(topicName, isKey, subjectNameStrategy));
+        String actualSubject =
+                subject.orElse(
+                        subjectNameStrategy
+                                .orElse(defaultSubjectNameStrategy)
+                                .subjectName(topicName, isKey, schema));
 
-    SchemaMetadata metadata;
-    try {
-      metadata = schemaRegistryClient.getLatestSchemaMetadata(actualSubject);
-    } catch (IOException | RestClientException e) {
-      throw new SerializationException(
-          String.format("Error when fetching latest schema version. subject = %s", actualSubject),
-          e);
+        int schemaId;
+        try {
+            try {
+                // Check if the schema already exists first.
+                schemaId = schemaRegistryClient.getId(actualSubject, schema);
+            } catch (IOException | RestClientException e) {
+                // Could not find the schema. We try to register the schema in that case.
+                schemaId = schemaRegistryClient.register(actualSubject, schema);
+            }
+        } catch (IOException | RestClientException e) {
+            throw new SerializationException(
+                    String.format(
+                            "Error when registering schema. format = %s, subject = %s, schema = %s",
+                            format, actualSubject, schema.canonicalString()),
+                    e);
+        }
+
+        int schemaVersion = getSchemaVersion(actualSubject, schema);
+
+        return RegisteredSchema.create(actualSubject, schemaId, schemaVersion, schema);
     }
 
-    ParsedSchema schema =
-        EmbeddedFormat.forSchemaType(metadata.getSchemaType())
-            .getSchemaProvider()
-            .parseSchema(metadata.getSchema(), metadata.getReferences(), /* isNew= */ false)
-            .orElseThrow(
-                () ->
-                    Errors.invalidSchemaException(
-                        String.format(
-                            "Error when fetching latest schema version. subject = %s",
-                            actualSubject)));
+    private RegisteredSchema findLatestSchema(
+            String topicName,
+            Optional<String> subject,
+            Optional<SubjectNameStrategy> subjectNameStrategy,
+            boolean isKey) {
+        String actualSubject =
+                subject.orElse(getSchemaSubjectUnsafe(topicName, isKey, subjectNameStrategy));
 
-    return RegisteredSchema.create(actualSubject, metadata.getId(), metadata.getVersion(), schema);
-  }
+        SchemaMetadata metadata;
+        try {
+            metadata = schemaRegistryClient.getLatestSchemaMetadata(actualSubject);
+        } catch (IOException | RestClientException e) {
+            throw new SerializationException(
+                    String.format("Error when fetching latest schema version. subject = %s", actualSubject),
+                    e);
+        }
 
-  /**
-   * Tries to get the schema subject from only schema_subject_strategy, {@code topicName} and {@code
-   * isKey}.
-   *
-   * <p>This operation is only really supported if schema_subject_strategy does not depend on the
-   * parsed schema to generate the subject name, as we need the subject name to fetch the schema by
-   * version. That's the case, for example, of TopicNameStrategy
-   * (schema_subject_strategy=TOPIC_NAME). Since TopicNameStrategy is so popular, instead of
-   * requiring users to always specify schema_subject if using schema_version?, we try using the
-   * strategy to generate the subject name, and fail if that does not work out.
-   */
-  private String getSchemaSubjectUnsafe(
-      String topicName, boolean isKey, Optional<SubjectNameStrategy> subjectNameStrategy) {
-    SubjectNameStrategy strategy = subjectNameStrategy.orElse(defaultSubjectNameStrategy);
+        ParsedSchema schema =
+                EmbeddedFormat.forSchemaType(metadata.getSchemaType())
+                        .getSchemaProvider()
+                        .parseSchema(metadata.getSchema(), metadata.getReferences(), /* isNew= */ false)
+                        .orElseThrow(
+                                () ->
+                                        Errors.invalidSchemaException(
+                                                String.format(
+                                                        "Error when fetching latest schema version. subject = %s",
+                                                        actualSubject)));
 
-    String subject = null;
-    Exception cause = null;
-    try {
-      subject = strategy.subjectName(topicName, isKey, /* schema= */ null);
-    } catch (Exception e) {
-      cause = e;
+        return RegisteredSchema.create(actualSubject, metadata.getId(), metadata.getVersion(), schema);
     }
 
-    if (subject == null) {
-      IllegalArgumentException error =
-          new IllegalArgumentException(
-              String.format(
-                  "Cannot use%s schema_subject_strategy%s without schema_id or schema.",
-                  subjectNameStrategy.map(requestStrategy -> "").orElse(" default"),
-                  subjectNameStrategy.map(requestStrategy -> "=" + strategy).orElse("")));
-      if (cause != null) {
-        error.initCause(cause);
-      }
-      throw error;
+    /**
+     * Tries to get the schema subject from only schema_subject_strategy, {@code topicName} and {@code
+     * isKey}.
+     *
+     * <p>This operation is only really supported if schema_subject_strategy does not depend on the
+     * parsed schema to generate the subject name, as we need the subject name to fetch the schema by
+     * version. That's the case, for example, of TopicNameStrategy
+     * (schema_subject_strategy=TOPIC_NAME). Since TopicNameStrategy is so popular, instead of
+     * requiring users to always specify schema_subject if using schema_version?, we try using the
+     * strategy to generate the subject name, and fail if that does not work out.
+     */
+    private String getSchemaSubjectUnsafe(
+            String topicName, boolean isKey, Optional<SubjectNameStrategy> subjectNameStrategy) {
+        SubjectNameStrategy strategy = subjectNameStrategy.orElse(defaultSubjectNameStrategy);
+
+        String subject = null;
+        Exception cause = null;
+        try {
+            subject = strategy.subjectName(topicName, isKey, /* schema= */ null);
+        } catch (Exception e) {
+            cause = e;
+        }
+
+        if (subject == null) {
+            IllegalArgumentException error =
+                    new IllegalArgumentException(
+                            String.format(
+                                    "Cannot use%s schema_subject_strategy%s without schema_id or schema.",
+                                    subjectNameStrategy.map(requestStrategy -> "").orElse(" default"),
+                                    subjectNameStrategy.map(requestStrategy -> "=" + strategy).orElse("")));
+            if (cause != null) {
+                error.initCause(cause);
+            }
+            throw error;
+        }
+
+        return subject;
     }
 
-    return subject;
-  }
+    //Custom Liam
+    @Override
+    public Map<String, Pair<Integer, org.apache.avro.Schema>> setSchemaSubject() {
+        try {
+            for (String subject : schemaRegistryClient.getAllSubjects()) {
+                SchemaMetadata schema = schemaRegistryClient.getLatestSchemaMetadata(subject);
+                subjectCache.put(subject, Pair.of(schema.getVersion(), new org.apache.avro.Schema.Parser().parse(schema.getSchema())));
+                //log.info(schema.getSchema());
+            }
+        } catch (RestClientException | IOException e) {
+            e.printStackTrace();
+        }
 
-  //Custom Liam
-  @Override
-  public Map<String, Pair<Integer, org.apache.avro.Schema>> setSchemaSubject() {
-    try {
-      for(String subject : schemaRegistryClient.getAllSubjects()) {
-        SchemaMetadata schema = schemaRegistryClient.getLatestSchemaMetadata(subject);
-        subjectCache.put(subject, Pair.of(schema.getVersion(), new org.apache.avro.Schema.Parser().parse(schema.getSchema())));
-        //log.info(schema.getSchema());
-      }
-    } catch (RestClientException | IOException e) {
-      e.printStackTrace();
+        return subjectCache;
     }
 
-    return subjectCache;
-  }
-
-  @Override
-  public CompletableFuture<Map<String, Pair<Integer, org.apache.avro.Schema>>> refreshSchemaSubject() {
-    return CompletableFuture.completedFuture(setSchemaSubject());
-  }
-
-  // schema-registry TopicNameStrategy
-  // Subject format plus “-key” or “-value” depending on configuration
-  @Override
-  public Pair<Integer, org.apache.avro.Schema> getRegistrySchema(String topic) {
-    if(subjectCache == null || subjectCache.size() == 0) {
-      try {
-        subjectCache = refreshSchemaSubject().get();
-      }catch (ExecutionException | InterruptedException e) {
-        e.printStackTrace();
-      }
+    @Override
+    public CompletableFuture<Map<String, Pair<Integer, org.apache.avro.Schema>>> refreshSchemaSubject() {
+        return CompletableFuture.completedFuture(setSchemaSubject());
     }
-    return subjectCache.getOrDefault(topic + "-value", null);
-  }
+
+    // schema-registry TopicNameStrategy
+    // Subject format plus “-key” or “-value” depending on configuration
+    @Override
+    public Pair<Integer, org.apache.avro.Schema> getRegistrySchema(String topic) {
+        if (subjectCache == null || subjectCache.size() == 0) {
+            try {
+                subjectCache = refreshSchemaSubject().get();
+            } catch (ExecutionException | InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        return subjectCache.getOrDefault(topic + "-value", null);
+    }
+
+    @Override
+    public void timerSchema() {
+        if(!isTimer) {
+            TimerTask task = new TimerTask() {
+                public void run() {
+                    Set<String> schemas = setSchemaSubject().keySet();
+                    log.info("Schema refresh " + schemas);
+                }
+            };
+            Timer timer = new Timer("Schema Refresh Timer");
+            long delay = 3000L;
+            long period = 300000L;  // 5분
+            timer.schedule(task, delay, period);
+            isTimer = true;
+        }
+    }
 }
